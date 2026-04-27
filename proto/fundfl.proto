@@ -1,32 +1,266 @@
 syntax = "proto3";
 package fundfl;
 
-// 基金查询服务
+// ══════════════════════════════════════════════════════════════
+// 原有基金分析服务（保留）
+// ══════════════════════════════════════════════════════════════
+
 service FundService {
-  // 获取基金基本信息
   rpc GetFund(GetFundRequest) returns (FundInfo);
-  // 获取基金风险指标
   rpc GetRiskMetrics(GetRiskRequest) returns (RiskMetrics);
-  // 搜索相似基金（向量检索）
   rpc SearchSimilar(SearchRequest) returns (SearchResponse);
-  // 获取基金列表（分页）
   rpc ListFunds(ListFundsRequest) returns (ListFundsResponse);
-  // 获取数据库统计
   rpc GetStats(StatsRequest) returns (StatsResponse);
 }
 
-// 向量操作服务
 service VectorService {
   rpc Insert(InsertRequest) returns (InsertResponse);
   rpc Search(VectorSearchRequest) returns (VectorSearchResponse);
   rpc Delete(DeleteRequest) returns (DeleteResponse);
 }
 
-// 审计服务
 service AuditService {
   rpc GetLog(LogRequest) returns (LogResponse);
   rpc VerifyChain(VerifyRequest) returns (VerifyResponse);
 }
+
+// ══════════════════════════════════════════════════════════════
+// 联邦学习服务（新增）
+// ══════════════════════════════════════════════════════════════
+
+service FederatedLearningService {
+  rpc RegisterNode(FLNodeRegistration) returns (FLRegisterResponse);
+  rpc SendUpdate(stream FLClientUpdate) returns (FLAggregationResult);
+  rpc GetGlobalWeights(FLWeightsRequest) returns (FLWeightsResponse);
+  rpc GetTrainingHistory(FLHistoryRequest) returns (FLHistoryResponse);
+}
+
+// 节点注册
+message FLNodeRegistration {
+  string node_id = 1;
+  string institution = 2;
+  uint32 data_size = 3;  // 本地样本数
+}
+
+message FLRegisterResponse {
+  bool success = 1;
+  uint32 registered_nodes = 2;
+}
+
+// 客户端模型更新
+message FLClientUpdate {
+  string client_id = 1;
+  uint32 round = 2;
+  repeated float weights = 3;  // 展平的模型权重
+  uint32 num_samples = 4;
+  float local_loss = 5;
+  map<string, float> factor_scores = 6;  // Task-Aware 用
+  string timestamp = 7;
+}
+
+message FLAggregationResult {
+  uint32 round = 1;
+  uint32 participants = 2;
+  repeated float global_weights = 3;
+  float global_loss = 4;
+  string merkle_root = 5;
+  bool privacy_enabled = 6;
+}
+
+message FLWeightsRequest {
+  uint32 round = 1;
+}
+
+message FLWeightsResponse {
+  uint32 round = 2;
+  repeated float weights = 3;
+  bool has_model = 4;
+}
+
+message FLHistoryRequest {}
+
+message FLHistoryResponse {
+  repeated RoundRecord records = 1;
+}
+
+message RoundRecord {
+  uint32 round = 1;
+  repeated string participants = 2;
+  float global_loss = 3;
+  float accuracy = 4;
+  uint64 aggregation_time_ms = 5;
+  string privacy_mechanism = 6;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 幻觉防御服务（新增）
+// ══════════════════════════════════════════════════════════════
+
+service HallucinationDefenseService {
+  rpc CheckClaim(DefenseRequest) returns (DefenseResponse);
+  rpc CheckConsistency(ConsistencyRequest) returns (ConsistencyResponse);
+  rpc BatchCheck(stream DefenseRequest) returns (stream DefenseResponse);
+}
+
+message DefenseRequest {
+  string claim_id = 1;
+  string claim = 2;
+  string context = 3;
+  float threshold = 4;
+}
+
+message DefenseResponse {
+  string claim_id = 1;
+  bool is_hallucination = 2;
+  float risk_score = 3;       // [0,1]
+  string verdict = 4;         // Verified / Uncertain / Hallucination
+  repeated string triggered_layers = 5;
+  string defense_action = 6;   // Accept / Flag / Reject
+  repeated DefenseEvidence evidence = 7;
+}
+
+message DefenseEvidence {
+  string layer = 1;
+  string description = 2;
+  float confidence = 3;
+  string doc_id = 4;
+  float similarity = 5;
+}
+
+message ConsistencyRequest {
+  string claim_id = 1;
+  repeated string samples = 2;  // 同一问题的多次采样答案
+  float threshold = 3;
+}
+
+message ConsistencyResponse {
+  string claim_id = 1;
+  float consistency_score = 2;
+  bool passes = 3;
+  string most_common_answer = 4;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Agent 编排服务（新增）
+// ══════════════════════════════════════════════════════════════
+
+service AgentService {
+  rpc PlanTask(AgentTaskRequest) returns (AgentPlanResponse);
+  rpc ExecuteTask(AgentTaskRequest) returns (AgentExecuteResponse);
+}
+
+message AgentTaskRequest {
+  string task = 1;
+  uint32 max_steps = 2;
+}
+
+message AgentPlanResponse {
+  string task_id = 1;
+  repeated PlanStep steps = 2;
+  float confidence = 3;
+}
+
+message PlanStep {
+  uint32 step_id = 1;
+  string tool = 2;           // VectorSearch / RiskAnalysis / FedLearning / HallucinationCheck / Report / Chart / Reflect
+  string reasoning = 3;
+  map<string, string> params = 4;
+  string expected_output = 5;
+}
+
+message AgentExecuteResponse {
+  string task_id = 1;
+  bool success = 2;
+  string final_answer = 3;
+  repeated ToolCall steps = 4;
+  float overall_confidence = 5;
+  uint64 total_duration_ms = 6;
+}
+
+message ToolCall {
+  string tool = 1;
+  map<string, string> params = 2;
+  string output = 3;
+  bool success = 4;
+  uint64 duration_ms = 5;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 原有消息定义（保留）
+// ══════════════════════════════════════════════════════════════
+
+message GetFundRequest { string fund_code = 1; }
+
+message FundInfo {
+  string code = 1; string name = 2; string category = 3;
+  string category_cn = 4; string manager = 5; string company = 6;
+  double nav = 7; double acc_nav = 8; int32 data_months = 9;
+}
+
+message GetRiskRequest {
+  string fund_code = 1;
+  string period = 2;
+}
+
+message RiskMetrics {
+  string fund_code = 1;
+  double ann_return = 2; double ann_vol = 3; double sharpe = 4;
+  double sortino = 5; double max_drawdown = 6; double beta = 7;
+  double alpha = 8; double treynor = 9; double info_ratio = 10;
+  double calmar = 11; double var_95 = 12; double cvar_95 = 13;
+  double m2 = 14; double skewness = 15; double kurtosis = 16; double win_rate = 17;
+}
+
+message SearchRequest {
+  string fund_code = 1; int32 top_k = 2; string category_filter = 3;
+}
+
+message SearchResponse { repeated SimilarFund results = 1; }
+
+message SimilarFund {
+  string code = 1; string name = 2; string category = 3;
+  double distance = 4; double similarity = 5;
+  RiskMetrics risk = 6;
+}
+
+message ListFundsRequest {
+  string category = 1; string sort_by = 2; string sort_order = 3;
+  int32 page = 4; int32 page_size = 5;
+}
+
+message ListFundsResponse {
+  repeated FundInfo funds = 1; int32 total = 2; int32 page = 3; int32 page_size = 4;
+}
+
+message StatsRequest {}
+
+message StatsResponse {
+  int64 total_funds = 1; int64 total_vectors = 2; int32 vector_dimension = 3;
+  repeated CategoryStats categories = 4; int64 audit_chain_length = 5; bool audit_chain_valid = 6;
+}
+
+message CategoryStats {
+  string category = 1; string category_cn = 2; int64 count = 3;
+  double avg_sharpe = 4; double avg_alpha = 5;
+}
+
+message VectorEntry {
+  string id = 1; repeated float values = 2; map<string, string> metadata = 3;
+}
+
+message InsertRequest { repeated VectorEntry vectors = 1; }
+message InsertResponse { int32 inserted = 1; }
+message VectorSearchRequest { repeated float query = 1; int32 k = 2; }
+message VectorSearchResponse { repeated VectorSearchResult results = 1; }
+message VectorSearchResult { string id = 1; float distance = 2; map<string, string> metadata = 3; }
+message DeleteRequest { repeated string ids = 1; }
+message DeleteResponse { int32 deleted = 1; }
+
+message LogRequest { int32 limit = 1; string operation_type = 2; }
+message LogResponse { repeated AuditEntry entries = 1; }
+message AuditEntry { int64 index = 1; string timestamp = 2; string operation = 3; string hash = 4; }
+message VerifyRequest {}
+message VerifyResponse { bool valid = 1; int64 chain_length = 2; string latest_hash = 3; }
 
 // ===== 消息定义 =====
 
