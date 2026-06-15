@@ -165,66 +165,9 @@ class RiskAnalyzer:
 
     @staticmethod
     def similarity(profile_a: RiskProfile, profile_b: RiskProfile) -> float:
-        """Cosine similarity between two risk profiles.
-
-        FedCtx integration: when unified-fl-backend is available, delegates
-        vector search to the Rust HNSW server for better performance.
-        """
+        """Cosine similarity between two risk profiles."""
         va = profile_a.to_feature_vector()
         vb = profile_b.to_feature_vector()
         dot = np.dot(va, vb)
         norm = np.linalg.norm(va) * np.linalg.norm(vb)
         return float(dot / norm) if norm > 1e-8 else 0.0
-
-    @staticmethod
-    def find_similar_funds(
-        query_profile: RiskProfile,
-        candidate_profiles: list[RiskProfile],
-        k: int = 5,
-    ) -> list[tuple[float, RiskProfile]]:
-        """Find k most similar funds to a query profile.
-
-        FedCtx integration: when unified-fl-backend is available, delegates
-        HNSW search to the Rust server. Falls back to local cosine similarity.
-        """
-        # Try FedCtx HNSW search
-        try:
-            from core.grpc_client import get_fedctx_client
-            client = get_fedctx_client()
-            if client.available:
-                # Insert all candidates into FedCtx
-                for p in candidate_profiles:
-                    client.vector_insert(
-                        f"fund::{p.fund_code}",
-                        p.to_feature_vector().tolist(),
-                        metadata={
-                            "fund_code": p.fund_code,
-                            "fund_name": p.fund_name,
-                            "type": "risk_profile",
-                        },
-                    )
-                # Search
-                resp = client.vector_search(
-                    query_profile.to_feature_vector().tolist(),
-                    k=k,
-                )
-                if resp and resp.get("results"):
-                    results = []
-                    code_map = {p.fund_code: p for p in candidate_profiles}
-                    for hit in resp["results"]:
-                        code = hit.get("metadata", {}).get("fund_code", "")
-                        if code in code_map and code != query_profile.fund_code:
-                            results.append((hit.get("distance", 1.0), code_map[code]))
-                    return results[:k]
-        except (ImportError, Exception):
-            pass  # Fall through to local search
-
-        # Local fallback: brute-force cosine similarity
-        scored = []
-        for p in candidate_profiles:
-            if p.fund_code == query_profile.fund_code:
-                continue
-            sim = RiskAnalyzer.similarity(query_profile, p)
-            scored.append((1.0 - sim, p))  # distance = 1 - similarity
-        scored.sort(key=lambda x: x[0])
-        return scored[:k]
